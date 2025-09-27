@@ -1287,3 +1287,20 @@ LPA_text_1 = """
 db = {}
 full_documents = {}
 doc_val = 0
+
+import json
+import os
+
+def save_db(db: dict, filename: str) -> None:
+    """Сохраняет словарь db в JSON-файл."""
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(db, f, ensure_ascii=False, indent=4)
+
+def load_db(filename: str) -> dict:
+    """Читает JSON-файл и возвращает словарь."""
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+if os.path.exists('save_db.json'):
+    db = load_db('save_db.json')

@@ -1,16 +1,14 @@
-from frst import client
 import re
-import re
+import os
 import nltk
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-from pymystem3 import Mystem
-from nltk.tokenize import WordPunctTokenizer
 from nltk.stem import SnowballStemmer
-from scnd import embedding_fn
-from hardcode_value import LPA_text_1, db
-import tqdm
+from nltk.tokenize import WordPunctTokenizer
 
+from AI_asistant import generate_question
+from frst import client
+from hardcode_value import db, save_db, load_db
+from scnd import embedding_fn
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -18,6 +16,7 @@ replace_list = '@#!?+&amp;*[]-%.:/();$=&gt;&lt;|{}^0123456789,.:!?»«' + "'`" +
 stemmer = SnowballStemmer("russian")
 tokenizer = WordPunctTokenizer()
 sw = stopwords.words("russian")
+
 
 # def get_clean_parts(text):
 #     chapters = re.split(r'\n(?=\d+\.\s)', text)
@@ -29,12 +28,9 @@ def get_clean_parts(text):
     chapters2 = re.split(r'\n(?=\d+\.\s)', text)
     return chapters1 + [chapter.strip() for chapter in chapters2 if chapter.strip()]
 
-
-
-
 def preprocess(text):
     chapters = get_clean_parts(text)
-    #replace_list = '\n:,\'".:!?1234567890№()»«-'
+    # replace_list = '\n:,\'".:!?1234567890№()»«-'
 
 
 def preprocess_text(text):
@@ -52,7 +48,6 @@ def preprocess_text(text):
     return ' '.join(stemmed_words)
 
 
-
 def process(text):
     data = []
     chunks = get_clean_parts(text)
@@ -60,7 +55,11 @@ def process(text):
         data.append(
             {
                 "id": i,
-                "vector": embedding_fn(preprocess_text(chunk)),  # your embedding function
+                "vector": embedding_fn(
+                    preprocess_text(
+                        generate_question(chunk)
+                    )
+                ),
                 "text": chunk,
                 "metadata": {},  # add any metadata here
             }
@@ -68,39 +67,35 @@ def process(text):
         db[i] = chunk
     client.insert(collection_name="documents", data=data)
 
-filename = "LPA_text_code.txt"
 
-with open(filename, "r", encoding="utf-8") as file:
-    text = file.read()
+def search(query):
+    query_vector = embedding_fn(preprocess_text(query))
+    res = client.search(
+        collection_name="documents",
+        anns_field="vector",
+        data=[query_vector],
+        limit=50,
+        search_params={
+            "params": {
+                "radius": 0.7,
+                "range_filter": 1
+            }
+        }
+    )
+    list_res = []
+    for hits in res:
+        for hit in hits:
+            list_res.append(db[hit["id"]])
 
-#print(text)
+    return list_res
 
-process(text)
+def add_to_db(filename):
 
+    with open(filename, "r", encoding="utf-8") as file:
+        text = file.read()
+    process(text)
 
-
-
-# 4. Single vector search
-print("ok1")
-query_vector = embedding_fn(preprocess_text("Задачи Совета Министров Республики Беларусь по интеграции государственных информационных ресурсов с общегосударственной автоматизированной информационной системой и по механизму подтверждения уплаты за административные процедуры"))
-print("ok2")
-res = client.search(
-    collection_name="documents",
-    anns_field="vector",
-    data=[query_vector],
-    limit=20,
-    search_params={
-        "params": {
-            "radius": 0.7,
-            "range_filter": 1
-        }}
-)
-print("ok3")
-for hits in res:
-    for hit in hits:
-        print(hit)
-        print(db[hit["id"]])
-
+# print(text)
 
 
 '''
@@ -118,3 +113,7 @@ for hits in res:
         print(hit)
 
 '''
+
+
+
+save_db(db, 'save_db.json')
