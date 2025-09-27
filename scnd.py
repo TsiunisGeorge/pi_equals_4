@@ -5,8 +5,8 @@ from sentence_transformers import SentenceTransformer
 #os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
 
-#model = SentenceTransformer('cointegrated/rubert-tiny2')
-model = SentenceTransformer('ai-forever/sbert_large_mt_nlu_ru')
+model = SentenceTransformer('cointegrated/rubert-tiny2')
+#model = SentenceTransformer('ai-forever/sbert_large_mt_nlu_ru')
 
 '''
 sentences = ["привет мир", "hello world", "здравствуй вселенная"]

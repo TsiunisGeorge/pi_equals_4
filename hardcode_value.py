@@ -1285,3 +1285,5 @@ LPA_text_1 = """
 """
 
 db = {}
+full_documents = {}
+doc_val = 0

@@ -19,9 +19,18 @@ stemmer = SnowballStemmer("russian")
 tokenizer = WordPunctTokenizer()
 sw = stopwords.words("russian")
 
+# def get_clean_parts(text):
+#     chapters = re.split(r'\n(?=\d+\.\s)', text)
+#     return [chapter.strip() for chapter in chapters if chapter.strip()]
+
+
 def get_clean_parts(text):
-    chapters = re.split(r'\n(?=\d+\.\s)', text)
-    return [chapter.strip() for chapter in chapters if chapter.strip()]
+    chapters1 = re.split(r'\n(?=\d+\.)', text)
+    chapters2 = re.split(r'\n(?=\d+\.\s)', text)
+    return chapters1 + [chapter.strip() for chapter in chapters2 if chapter.strip()]
+
+
+
 
 def preprocess(text):
     chapters = get_clean_parts(text)
@@ -59,14 +68,13 @@ def process(text):
         db[i] = chunk
     client.insert(collection_name="documents", data=data)
 
-#filename = "LPA_text_code.txt"
+filename = "LPA_text_code.txt"
 
-#with open(filename, "r", encoding="utf-8") as file:
-#    text = file.read()
+with open(filename, "r", encoding="utf-8") as file:
+    text = file.read()
 
 #print(text)
-text = LPA_text_1
-print(embedding_fn(preprocess_text(get_clean_parts(text)[0]))[0])
+
 process(text)
 
 
@@ -74,14 +82,18 @@ process(text)
 
 # 4. Single vector search
 print("ok1")
-query_vector = embedding_fn("какие указания дал президент?")
+query_vector = embedding_fn(preprocess_text("Задачи Совета Министров Республики Беларусь по интеграции государственных информационных ресурсов с общегосударственной автоматизированной информационной системой и по механизму подтверждения уплаты за административные процедуры"))
 print("ok2")
 res = client.search(
     collection_name="documents",
     anns_field="vector",
     data=[query_vector],
-    limit=10,
-    search_params={"metric_type": "COSINE"}
+    limit=20,
+    search_params={
+        "params": {
+            "radius": 0.7,
+            "range_filter": 1
+        }}
 )
 print("ok3")
 for hits in res:
