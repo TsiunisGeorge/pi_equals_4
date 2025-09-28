@@ -10,7 +10,8 @@ from openai import OpenAI
 # Для простоты примера, можно указать ключ напрямую:
 client = OpenAI(api_key="")  # ЗАМЕНИТЕ НА ВАШ КЛЮЧ
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
-
+#MODEL_NAME = "gpt-5-nano"
+MAX_PROMPT_SIZE = 60000
 # --- 2. СИСТЕМНЫЕ ПРОМПТЫ (как мы и определили) ---
 
 SYSTEM_PROMPT_QUERY_TRANSFORMER = """
@@ -33,6 +34,19 @@ SYSTEM_PROMPT_ANSWER_GENERATOR = """
 2.  Строй свой ответ на основе самых релевантных цитат из текстов.
 3.  Если предоставленные фрагменты не содержат ответа на вопрос, вежливо сообщи: "К сожалению, я не смог найти точную информацию по вашему вопросу в документации."
 4.  Отвечай на русском языке, вежливо и по делу.
+5.  При формулировании ответа приводи цитаты из предоставленных фрагментов
+"""
+
+DOC_PROMPT_GENERATOR = """
+Ты — внимательный и точный AI-ассистент поддержки. Тебе будет предоставлен исходный вопрос пользователя и несколько пронумерованных фрагментов из внутренней документации.
+
+Твоя задача — сформулировать исчерпывающий и понятный документ на запрос пользователя, основываясь на предоставленных фрагментах.
+
+Правила:
+1.  НИКОГДА не используй свои общие знания и не придумывай информацию. Вся информация для ответа должна быть взята из предоставленного контекста.
+2.  Строй свой ответ на основе самых релевантных цитат из текстов.
+3.  Если предоставленные фрагменты не содержат ответа на вопрос, попытайся сформулировать дополнения для успешной генерации текстов"
+4.  Отвечай на русском языке, вежливо и по делу.
 """
 
 
@@ -50,9 +64,9 @@ def get_optimized_query(user_question: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT_QUERY_TRANSFORMER},
                 {"role": "user", "content": user_question}
             ],
-            temperature=0.0  # Минимальная "креативность" для точности
+            temperature=0.2  # Минимальная "креативность" для точности
         )
-        optimized_query = response.choices[0].message.content.strip()
+        optimized_query = response.choices[0].message.content
         print(f"Оригинальный вопрос: '{user_question}'")
         print(f"Оптимизированный запрос: '{optimized_query}'\n")
         return optimized_query
@@ -71,7 +85,8 @@ def get_final_answer(user_question: str, context_docs: list[str]) -> str:
 
     # Собираем контекст в единый промпт для модели
     context_string = "\n".join(context_docs)
-
+    if len(context_string) > MAX_PROMPT_SIZE:
+        context_string = context_string[:MAX_PROMPT_SIZE]
     user_prompt = f"""
 ИСХОДНЫЙ ВОПРОС ПОЛЬЗОВАТЕЛЯ:
 "{user_question}"
@@ -79,6 +94,7 @@ def get_final_answer(user_question: str, context_docs: list[str]) -> str:
 ФРАГМЕНТЫ ИЗ ДОКУМЕНТАЦИИ:
 {context_string}
 """
+    print(len(user_prompt.split("\n")), user_prompt)
 
     try:
         response = client.chat.completions.create(
@@ -87,7 +103,7 @@ def get_final_answer(user_question: str, context_docs: list[str]) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT_ANSWER_GENERATOR},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2  # Немного креативности для связного текста
+            temperature=0.7  # Немного креативности для связного текста
         )
         final_answer = response.choices[0].message.content
         print("Ответ успешно сгенерирован.\n")
@@ -111,7 +127,7 @@ def generate_question(paragraph: str) -> str:
     """
 
     response = client.chat.completions.create(
-        model="gpt-4o1-mini",
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": "You generate compliance-related questions from laws."},
             {"role": "user", "content": prompt}
@@ -121,3 +137,37 @@ def generate_question(paragraph: str) -> str:
     )
 
     return response.choices[0].message.content.strip()
+
+
+def dop_prompt(prompt: str, context_docs: list[str]):
+    if not context_docs:
+        return "К сожалению, я не смог найти информацию по вашему вопросу в документации."
+
+    # Собираем контекст в единый промпт для модели
+    context_string = "\n".join(context_docs)
+    if len(context_string) > MAX_PROMPT_SIZE:
+        context_string = context_string[:MAX_PROMPT_SIZE]
+    user_prompt = f"""
+    ИСХОДНЫЙ Требования ПОЛЬЗОВАТЕЛЯ:
+    "{prompt}"
+
+    ФРАГМЕНТЫ ИЗ ДОКУМЕНТАЦИИ:
+    {context_string}
+    """
+    print(len(user_prompt.split("\n")), user_prompt)
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": DOC_PROMPT_GENERATOR},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7  # Немного креативности для связного текста
+        )
+        final_answer = response.choices[0].message.content
+        print("Ответ успешно сгенерирован.\n")
+        return final_answer
+    except Exception as e:
+        print(f"Ошибка на Этапе 2: {e}")
+        return "Произошла ошибка при генерации ответа."
