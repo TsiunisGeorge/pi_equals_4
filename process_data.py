@@ -5,14 +5,13 @@ from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
 from nltk.tokenize import WordPunctTokenizer
 
-from AI_asistant import generate_question
 from frst import client
 from hardcode_value import db, save_db, load_db
-from scnd import embedding_fn
+from frst import embedding_fn
 
 nltk.download('punkt')
 nltk.download('stopwords')
-replace_list = '@#!?+&amp;*[]-%.:/();$=&gt;&lt;|{}^0123456789,.:!?»«' + "'`" + '_'
+replace_list = '@#!?+&amp;*[]-%.:/();$=&gt;&lt;|{}^,.:!?»«' + "'`" + '_'
 stemmer = SnowballStemmer("russian")
 tokenizer = WordPunctTokenizer()
 sw = stopwords.words("russian")
@@ -26,7 +25,8 @@ sw = stopwords.words("russian")
 def get_clean_parts(text):
     chapters1 = re.split(r'\n(?=\d+\.)', text)
     chapters2 = re.split(r'\n(?=\d+\.\s)', text)
-    return chapters1 + [chapter.strip() for chapter in chapters2 if chapter.strip()]
+
+    return chapters1 + [chapter.strip() for chapter in chapters2 if chapter.strip()] + [text[i:i+512] for i in range(0, len(text), 512)]
 
 def preprocess(text):
     chapters = get_clean_parts(text)
@@ -48,7 +48,7 @@ def preprocess_text(text):
     return ' '.join(stemmed_words)
 
 
-def process(text):
+def process(text, name: str):
     data = []
     chunks = get_clean_parts(text)
     for i, chunk in enumerate(chunks):
@@ -56,15 +56,14 @@ def process(text):
             {
                 "id": i,
                 "vector": embedding_fn(
-                    preprocess_text(
-                        generate_question(chunk)
-                    )
+                    preprocess_text(chunk)
                 ),
                 "text": chunk,
                 "metadata": {},  # add any metadata here
             }
         )
-        db[i] = chunk
+        db[i] = chunk + ' источник:' + name
+    save_db(db, 'save_db.json')
     client.insert(collection_name="documents", data=data)
 
 
@@ -74,10 +73,10 @@ def search(query):
         collection_name="documents",
         anns_field="vector",
         data=[query_vector],
-        limit=50,
+        limit=10,
         search_params={
             "params": {
-                "radius": 0.7,
+                "radius": 0.60,
                 "range_filter": 1
             }
         }
@@ -87,15 +86,34 @@ def search(query):
         for hit in hits:
             list_res.append(db[hit["id"]])
 
-    return list_res
+    return remove_substrings(list_res)
+
+def remove_substrings(lines: list[str]) -> list[str]:
+    seen = set()
+    unique_lines = []
+    for line in lines:
+        if line not in seen:
+            seen.add(line)
+            unique_lines.append(line)
+
+    result = []
+    for i, line in enumerate(unique_lines):
+        is_substring = any(line in other and line != other for j, other in enumerate(unique_lines) if i != j)
+        if not is_substring:
+            result.append(line)
+
+    return result
 
 def add_to_db(filename):
 
     with open(filename, "r", encoding="utf-8") as file:
         text = file.read()
-    process(text)
+    process(text, filename)
 
 # print(text)
+
+#add_to_db("LPA_text_code.txt")
+
 
 
 '''
@@ -114,6 +132,5 @@ for hits in res:
 
 '''
 
-
-
+#add_to_db("LPA_text_code.txt")
 save_db(db, 'save_db.json')
